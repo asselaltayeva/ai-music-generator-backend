@@ -4,6 +4,7 @@ import modal
 import os
 
 from pydantic import BaseModel
+import requests
 
 app = modal.App("music-generator")
 
@@ -35,6 +36,7 @@ class GenerateMusicResponse (BaseModel):
     secrets = [music_gen_secrets],
     scaledown_window= 15
 )
+
 class MusicGenServer:
     @modal.enter()
     def load_model(self):
@@ -72,31 +74,42 @@ class MusicGenServer:
             )
         self.image_pipe.to("cuda")
 
-        @modal.fastapi_endpoint(method="POST")
-        def generate(self) -> GenerateMusicResponse: 
-            output_dir= "/tmp/outputs/"
-            os.mkdir(output_dir, exist_ok=True)
-            output_path = os.path.join(output_dir, f"{uuid.uuid4()}.wav")
+    @modal.fastapi_endpoint(method="POST")
+    def generate(self) -> GenerateMusicResponse: 
+        output_dir= "/tmp/outputs/"
+        os.makedirs(output_dir, exist_ok=True)
+        output_path = os.path.join(output_dir, f"{uuid.uuid4()}.wav")
 
-            self.music_model(
-            prompt="electronic rap",
-            lyrics="[verse]\nWaves on the bass, pulsing in the speakers,\nTurn the dial up, we chasing six-figure features,\nGrinding on the beats, codes in the creases,\nDigital hustler, midnight in sneakers.\n\n[chorus]\nElectro vibes, hearts beat with the hum,\nUrban legends ride, we ain't ever numb,\nCircuits sparking live, tapping on the drum,\nLiving on the edge, never succumb.\n\n[verse]\nSynthesizers blaze, city lights a glow,\nRhythm in the haze, moving with the flow,\nSwagger on stage, energy to blow,\nFrom the blocks to the booth, you already know.\n\n[bridge]\nNight's electric, streets full of dreams,\nBass hits collective, bursting at seams,\nHustle perspective, all in the schemes,\nRise and reflective, ain't no in-betweens.\n\n[verse]\nVibin' with the crew, sync in the wire,\nGot the dance moves, fire in the attire,\nRhythm and blues, soul's our supplier,\nRun the digital zoo, higher and higher.\n\n[chorus]\nElectro vibes, hearts beat with the hum,\nUrban legends ride, we ain't ever numb,\nCircuits sparking live, tapping on the drum,\nLiving on the edge, never succumb.",
-            audio_duration=180,
-            infer_step=60,
-            guidance_scale=15,
-            save_path=output_path,
-            )
+        self.music_model(
+        prompt="electronic rap",
+        lyrics="[verse]\nWaves on the bass, pulsing in the speakers,\nTurn the dial up, we chasing six-figure features,\nGrinding on the beats, codes in the creases,\nDigital hustler, midnight in sneakers.\n\n[chorus]\nElectro vibes, hearts beat with the hum,\nUrban legends ride, we ain't ever numb,\nCircuits sparking live, tapping on the drum,\nLiving on the edge, never succumb.\n\n[verse]\nSynthesizers blaze, city lights a glow,\nRhythm in the haze, moving with the flow,\nSwagger on stage, energy to blow,\nFrom the blocks to the booth, you already know.\n\n[bridge]\nNight's electric, streets full of dreams,\nBass hits collective, bursting at seams,\nHustle perspective, all in the schemes,\nRise and reflective, ain't no in-betweens.\n\n[verse]\nVibin' with the crew, sync in the wire,\nGot the dance moves, fire in the attire,\nRhythm and blues, soul's our supplier,\nRun the digital zoo, higher and higher.\n\n[chorus]\nElectro vibes, hearts beat with the hum,\nUrban legends ride, we ain't ever numb,\nCircuits sparking live, tapping on the drum,\nLiving on the edge, never succumb.",
+        audio_duration=180,
+        infer_step=60,
+        guidance_scale=15,
+        save_path=output_path,
+        )
 
-            with open(output_path, "rb") as f:
-                audio_bytes = f.read()
+        with open(output_path, "rb") as f:
+            audio_bytes = f.read()
             
-            audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
+        audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
 
-            os.remove(output_path)
+        os.remove(output_path)
 
-            return GenerateMusicResponse(audio_data=audio_b64)
+        return GenerateMusicResponse(audio_data=audio_b64)
             
 
 @app.local_entrypoint()
 def main():
-    pass
+    server = MusicGenServer()
+    endpoint_url = server.generate.get_web_url()
+
+    response = requests.post(endpoint_url)
+    response.raise_for_status()
+    result = GenerateMusicResponse(**response.json())
+
+    audio_bytes = base64.b64decode(result.audio_data)
+    output_filename = "generated.wav"
+
+    with open(output_filename, "wb") as f:
+        f.write(audio_bytes)
