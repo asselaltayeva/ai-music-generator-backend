@@ -169,7 +169,17 @@ class MusicGenServer:
         s3_client.upload_file(output_path, bucket_name, audio_s3_key)
         os.remove(output_path)
 
-        #Cover image
+        #Cover image generation
+        thumbnail_prompt = f"{prompt}, modern music album cover art, high quality, digital illustration, minimalist, vibrant colors, trending on artstation"
+        image = self.image_pipe(prompt = thumbnail_prompt, num_inference_steps=2, guidance_scale=0.0).images[0]
+        
+        image_output_path = os.path.join(output_dir, f"{uuid.uuid4()}.png")
+        image.save(image_output_path)
+
+        image_s3_key = f"{uuid.uuid4()}.png"
+        s3_client.upload_file(image_output_path, bucket_name, image_s3_key)
+        os.remove(image_output_path)
+
         #Categories
 
 
