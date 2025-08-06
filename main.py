@@ -131,9 +131,17 @@ class MusicGenServer:
         return self.prompt_qwen(full_prompt)
     
     def generate_lyrics(self, description: str):
-        #llm to generate prompt from description 
+        #llm to generate lytics from description 
         full_prompt = LYRICS_GENERATOR_PROMPT.format(description = description )
         return self.prompt_qwen(full_prompt)
+    
+    def generate_categories(self, description: str) -> List[str]:
+        #llm to generate categories from description
+        prompt = f"Based on the following music description, list 3-5 relevant genres or categories as a comma-separated list. For example: Pop, Electronic, Sad, 80s. Description: '{description}'"
+
+        response_text = self.prompt_qwen(prompt)
+        categories = [cat.strip() for cat in response_text.split(",") if cat.strip()]
+        return categories
     
     def generate_and_upload_to_s3(
             self,
@@ -144,6 +152,7 @@ class MusicGenServer:
             infer_step: int,
             guidance_scale: float,
             seed: int,
+            description_for_categories:str,
     ) -> GenerateMusicResponseS3:
         final_lyrics = "[instrumental]" if instrumental else lyrics
         print(f"Generating music with prompt: {prompt} and lyrics: {final_lyrics}")
@@ -171,7 +180,7 @@ class MusicGenServer:
 
         #Cover image generation
         thumbnail_prompt = f"{prompt}, modern music album cover art, high quality, digital illustration, minimalist, vibrant colors, trending on artstation"
-        image = self.image_pipe(prompt = thumbnail_prompt, num_inference_steps=2, guidance_scale=0.0).images[0]
+        image = self.image_pipe(prompt = thumbnail_prompt, num_inference_steps=2, guidance_scale=7.5).images[0]
         
         image_output_path = os.path.join(output_dir, f"{uuid.uuid4()}.png")
         image.save(image_output_path)
@@ -180,8 +189,14 @@ class MusicGenServer:
         s3_client.upload_file(image_output_path, bucket_name, image_s3_key)
         os.remove(image_output_path)
 
-        #Categories
-
+        #Categories generation
+        categories = self.generate_categories(description_for_categories)
+        
+        return GenerateMusicResponseS3(
+            s3_key=audio_s3_key,
+            cover_image_s3_key=image_s3_key,
+            categories=categories
+        )
 
     @modal.fastapi_endpoint(method="POST")
     def generate(self) -> GenerateMusicResponse: 
@@ -216,7 +231,6 @@ class MusicGenServer:
         lyrics = ""
         if not request.instrumental:
             lyrics = self.generate_lyrics(request.full_described_song)
-        
         
 
     @modal.fastapi_endpoint(method="POST")
