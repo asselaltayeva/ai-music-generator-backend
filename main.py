@@ -159,7 +159,7 @@ class MusicGenServer:
 
         #AWS S3 upload logic 
         s3_client = boto3.client("s3")
-        bucket_name = os.environ("S3_BUCKET_NAME")
+        bucket_name = os.environ["S3_BUCKET_NAME"]
 
         output_dir = "/tmp/outputs"
         os.makedirs(output_dir, exist_ok=True)
@@ -179,8 +179,8 @@ class MusicGenServer:
         os.remove(output_path)
 
         #Cover image generation
-        thumbnail_prompt = f"{prompt}, modern music album cover art, high quality, digital illustration, minimalist, vibrant colors, trending on artstation"
-        image = self.image_pipe(prompt = thumbnail_prompt, num_inference_steps=2, guidance_scale=7.5).images[0]
+        thumbnail_prompt = f"{prompt}, modern music album cover art, high quality, minimalist"
+        image = self.image_pipe(prompt = thumbnail_prompt, num_inference_steps=2, guidance_scale=0.0).images[0]
         
         image_output_path = os.path.join(output_dir, f"{uuid.uuid4()}.png")
         image.save(image_output_path)
@@ -231,28 +231,55 @@ class MusicGenServer:
         lyrics = ""
         if not request.instrumental:
             lyrics = self.generate_lyrics(request.full_described_song)
-        
+        return self.generate_and_upload_to_s3(
+            prompt=prompt,
+            lyrics=lyrics,
+            description_for_categories=request.full_described_song,
+            **request.model_dump(exclude={"full_described_song"})
+        )
 
     @modal.fastapi_endpoint(method="POST")
     def generate_with_lyrics(self, request: GenerateWithCustomLyricsRequest) -> GenerateMusicResponseS3: 
-        pass
+        return self.generate_and_upload_to_s3(
+            prompt=request.prompt,
+            lyrics=request.lyrics,
+            description_for_categories=request.prompt,
+            **request.model_dump(exclude={"prompt", "lyrics"})
+        )
 
     @modal.fastapi_endpoint(method="POST")
     def generate_with_described_lyrics(self, request: GenerateWithDescribedLyricsRequest) -> GenerateMusicResponseS3: 
-        pass
-            
+        #Generate lyrics
+        lyrics = ""
+        if not request.instrumental:
+            lyrics = self.generate_lyrics(request.full_described_song)
+        return self.generate_and_upload_to_s3(
+            prompt=request.prompt,
+            lyrics=lyrics,
+            description_for_categories=request.full_described_song,
+            **request.model_dump(exclude={"described_lyrics", "prompt"})
+        )
 
 @app.local_entrypoint()
 def main():
     server = MusicGenServer()
-    endpoint_url = server.generate.get_web_url()
+    endpoint_url = server.generate_from_description.get_web_url()
 
-    response = requests.post(endpoint_url)
+    request_data = GenerateFromDescriptionRequest(
+        full_described_song = "A vibrant electronic rap song with a futuristic beat, featuring",
+        guidance_scale = 7.5,
+    )
+
+    payload = request_data.model_dump()
+
+    response = requests.post(endpoint_url, json=payload)
     response.raise_for_status()
-    result = GenerateMusicResponse(**response.json())
+    result = GenerateMusicResponseS3(**response.json())
 
-    audio_bytes = base64.b64decode(result.audio_data)
-    output_filename = "generated.wav"
+    print(f"Successfully generated music with S3 key: {result.s3_key}, {result.cover_image_s3_key}, categories: {result.categories}")
 
-    with open(output_filename, "wb") as f:
-        f.write(audio_bytes)
+    # audio_bytes = base64.b64decode(result.audio_data)
+    # output_filename = "generated.wav"
+
+    # with open(output_filename, "wb") as f:
+    #     f.write(audio_bytes)
