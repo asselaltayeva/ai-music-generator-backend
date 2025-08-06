@@ -263,11 +263,11 @@ class MusicGenServer:
 @app.local_entrypoint()
 def main():
     server = MusicGenServer()
-    endpoint_url = server.generate_from_description.get_web_url()
+    endpoint_url = server.generate_with_lyrics.get_web_url()
 
-    request_data = GenerateFromDescriptionRequest(
-        full_described_song = "A vibrant electronic rap song with a futuristic beat, featuring",
-        guidance_scale = 7.5,
+    request_data = GenerateWithCustomLyricsRequest(
+        prompt = "chill beats for studying, relaxing, and working",
+        lyrics = "[verse]\nSoftly the rain falls, tapping on the glass,\nWhispers of the night, as the moments pass,\nIn this quiet space, time seems to slow,\nLost in the rhythm, where thoughts freely flow.\n\n[chorus]\nLofi beats, calming my mind,\nIn this mellow groove, peace I find,\nGentle melodies, like a warm embrace,\nIn this lofi world, I find my place.\n\n[verse]\nCity lights flicker, shadows dance and sway,\nUnderneath the stars, where dreams come out to play,\nWith every note I hear, worries fade away,\nIn this lofi vibe, I’m here to stay.\n\n[chorus]\nLofi beats, calming my mind,\nIn this mellow groove, peace I find,\nGentle melodies, like a warm embrace,\nIn this lofi world, I find my place.",
     )
 
     payload = request_data.model_dump()
